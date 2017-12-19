@@ -1,0 +1,53 @@
+---
+
+- name: Asserts params
+  assert:
+    that: old is defined and new is defined
+
+- name: Defines YAML macros
+  set_fact:
+    macros:
+      - &ro
+        changed_when: False
+        check_mode: False
+      - &getent_loop
+        with_items: [ '{{ old }}', '{{ new }}' ]
+        register: getent
+        failed_when: getent.rc not in [ 0, 2 ]
+        <<: *ro
+      - &getent_assert
+        that: getent.results[0].rc == 0 and getent.results[1].rc == 2
+
+- name: Gets user status for old and new
+  command: getent passwd {{ item }}
+  <<: *getent_loop
+    
+- name: Asserts old user exists and new user does not
+  assert: *getent_assert
+      
+- name: Gets user group status for old and new
+  command: getent group {{ item }}
+  <<: *getent_loop
+
+- name: Asserts old user group exists and new user does not
+  assert: *getent_assert
+      
+- name: Gets user home dir
+  command: getent passwd {{ old }}
+  register: getent
+  <<: *ro
+
+- name: Prepares commands
+  set_fact:
+    commands:
+      - usermod -l {{ new }} -d {{ getent.stdout.split(':')[5].split('/')[:-1] | join('/') }}/{{ new }} -m {{ old }}
+      - groupmod -n {{ new }} {{ old }}
+      
+- debug: { var: item }
+  with_items: '{{ commands }}'
+  verbosity: 1
+
+- name: Changes username and home dir
+  command: '{{ item }}'
+  with_items: '{{ commands }}'
+  become: True
