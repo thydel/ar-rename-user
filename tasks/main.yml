@@ -1,15 +1,14 @@
 ---
 
-- name: Asserts params
-  assert:
-    that: old is defined and new is defined
-
 - name: Defines YAML macros
   set_fact:
     macros:
       - &ro
         changed_when: False
         check_mode: False
+      - &lo
+        run_once: True
+        delegate_to: localhost
       - &getent_loop
         with_items: [ '{{ old }}', '{{ new }}' ]
         register: getent
@@ -17,6 +16,11 @@
         <<: *ro
       - &getent_assert
         that: getent.results[0].rc == 0 and getent.results[1].rc == 2
+  <<: *lo
+
+- name: Asserts params
+  assert: { that: old is defined and new is defined }
+  <<: *lo
 
 - name: Gets user status for old and new
   command: getent passwd {{ item }}
@@ -43,10 +47,6 @@
       - usermod -l {{ new }} -d {{ getent.stdout.split(':')[5].split('/')[:-1] | join('/') }}/{{ new }} -m {{ old }}
       - groupmod -n {{ new }} {{ old }}
       
-- debug: { var: item }
-  with_items: '{{ commands }}'
-  verbosity: 1
-
 - name: Changes username and home dir
   command: '{{ item }}'
   with_items: '{{ commands }}'

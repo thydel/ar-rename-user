@@ -1,0 +1,40 @@
+#!/usr/bin/env ansible-playbook
+---
+
+- name: Groups by old
+  hosts: all
+  gather_facts: False
+
+  tasks:
+
+    - name: Defines YAML macros
+      set_fact:
+        macros:
+          - &lo
+            run_once: True
+            delegate_to: localhost
+      <<: *lo
+
+    - name: Asserts params
+      assert: { that: old is defined and new is defined }
+      <<: *lo
+
+    - name: Gets old status
+      command: getent passwd {{ old }}
+      register: getent
+      failed_when: getent.rc not in [ 0, 2 ]
+      changed_when: False
+      check_mode: False
+
+    - name: Makes groups
+      group_by: { key: 'old_user_{{ getent.rc == 0 }}' }
+
+    - debug: { msg: 'old user on {{ groups.old_user_True | join(" ") }}' }
+      when: show is defined and 'old_user_True' in groups
+      <<: *lo
+
+- name: Rename user
+  hosts: old_user_True
+  gather_facts: False
+
+  roles: [ rename-user ]
